@@ -1,9 +1,13 @@
 const express = require("express");
 const app = express();
-const PORT = 3000;
+const Joi = require("joi"); 
+const PORT = 3001;
 
-// Middleware to serve static files from the 'public' folder
 app.use(express.static("public"));
+
+const cors = require("cors");
+app.use(cors());
+app.use(express.json());
 
 // Japanese recipes data
 const recipes = [
@@ -87,11 +91,41 @@ const recipes = [
       description: "Chewy and sweet rice cakes often filled with a sweet paste, perfect for dessert.",
       main_image: "/images/mochi.jpg",
     },
-  ];  
+  ];
+
+  const recipeSchema = Joi.object({
+    name: Joi.string().min(3).required(),
+    size: Joi.string().required(),
+    ingredients: Joi.array().items(Joi.string()).min(1).required(),
+    prep_time: Joi.string().required(),
+    cooking_time: Joi.string().required(),
+    description: Joi.string().required(),
+    main_image: Joi.string().uri().required(),
+  });
 
 // Route to serve the recipes as JSON
 app.get("/api/recipes", (req, res) => {
   res.json(recipes);
+});
+
+// POST request: Add a new recipe
+app.post("/api/recipes", (req, res) => {
+  console.log("Request body:", req.body); // Log incoming data for debugging
+
+  const { error, value } = recipeSchema.validate(req.body);
+  if (error) {
+    console.error("Validation error:", error.details); // Log validation errors
+    return res.status(400).json({ success: false, message: error.details[0].message });
+  }
+
+  const newRecipe = {
+    _id: recipes.length + 1, // Generate new ID
+    ...value,
+  };
+
+  recipes.push(newRecipe); // Add the new recipe
+  console.log("New recipe added:", newRecipe); // Log the added recipe
+  res.status(201).json({ success: true, recipe: newRecipe });
 });
 
 // Serve the index.html file
