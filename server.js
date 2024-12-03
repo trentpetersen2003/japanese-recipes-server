@@ -100,8 +100,8 @@ const recipes = [
     prep_time: Joi.string().required(),
     cooking_time: Joi.string().required(),
     description: Joi.string().required(),
-    main_image: Joi.string().uri().required(),
-  });
+    main_image: Joi.string().uri().optional(),
+  }).unknown(true);
 
 // Route to serve the recipes as JSON
 app.get("/api/recipes", (req, res) => {
