@@ -110,22 +110,53 @@ app.get("/api/recipes", (req, res) => {
 
 // POST request: Add a new recipe
 app.post("/api/recipes", (req, res) => {
-  console.log("Request body:", req.body); // Log incoming data for debugging
+  console.log("Request body:", req.body); 
 
   const { error, value } = recipeSchema.validate(req.body);
   if (error) {
-    console.error("Validation error:", error.details); // Log validation errors
+    console.error("Validation error:", error.details);
     return res.status(400).json({ success: false, message: error.details[0].message });
   }
 
   const newRecipe = {
-    _id: recipes.length + 1, // Generate new ID
+    _id: recipes.length + 1, 
     ...value,
   };
 
-  recipes.push(newRecipe); // Add the new recipe
-  console.log("New recipe added:", newRecipe); // Log the added recipe
+  recipes.push(newRecipe); 
+  console.log("New recipe added:", newRecipe); 
   res.status(201).json({ success: true, recipe: newRecipe });
+});
+
+// PUT request: Update existing recipe
+app.put("/api/recipes/:id", (req, res) => {
+  const recipeId = parseInt(req.params.id); 
+
+  const { error, value } = recipeSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
+  }
+
+  const index = recipes.findIndex((recipe) => recipe._id === recipeId);
+  if (index === -1) {
+    return res.status(404).json({ success: false, message: "Recipe not found" });
+  }
+
+  recipes[index] = { ...recipes[index], ...value }; 
+  res.status(200).json({ success: true, recipe: recipes[index] });
+});
+
+// DELETE request: Delete recipe
+app.delete("/api/recipes/:id", (req, res) => {
+  const recipeId = parseInt(req.params.id); 
+
+  const index = recipes.findIndex((recipe) => recipe._id === recipeId);
+  if (index === -1) {
+    return res.status(404).json({ success: false, message: "Recipe not found" });
+  }
+
+  recipes.splice(index, 1); 
+  res.status(200).json({ success: true, message: "Recipe deleted successfully" });
 });
 
 // Serve the index.html file
