@@ -100,7 +100,9 @@ const recipes = [
     prep_time: Joi.string().required(),
     cooking_time: Joi.string().required(),
     description: Joi.string().required(),
-    main_image: Joi.string().uri().optional(),
+    main_image: Joi.string()
+      .pattern(/^(https?:\/\/[^\s]+|\/[^\s]+(\.jpg|\.png|\.jpeg))$/i)
+      .required(),
   }).unknown(true);
 
 // Route to serve the recipes as JSON
