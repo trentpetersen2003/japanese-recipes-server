@@ -1,96 +1,41 @@
 const express = require("express");
 const app = express();
 const Joi = require("joi"); 
+const Recipe = require('./models/recipe');
+require('dotenv').config();
 const PORT = 3001;
 
 app.use(express.static("public"));
+app.use('/uploads', express.static('uploads'));
+
+const mongoose = require('mongoose');
+require('dotenv').config();
+
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('Connected to MongoDB'))
+  .catch(err => console.error('Failed to connect to MongoDB:', err));
 
 const cors = require("cors");
 app.use(cors());
 app.use(express.json());
 
+const multer = require('multer');
+const path = require('path');
+
+// Configure storage for uploaded files
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/'); // Save files in the 'uploads' folder
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + path.extname(file.originalname)); // Add timestamp to avoid name conflicts
+  },
+});
+
+const upload = multer({ storage });
+
 // Japanese recipes data
 const recipes = [
-    {
-      _id: 1,
-      name: "Sushi Rolls",
-      size: "4 servings",
-      ingredients: ["Sushi rice", "Nori (seaweed)", "Fresh fish (e.g., salmon or tuna)"],
-      prep_time: "30 minutes",
-      cooking_time: "20 minutes",
-      description: "Delicious sushi rolls filled with fresh fish and vegetables, perfect for any occasion.",
-      main_image: "/images/sushi_rolls.jpg",
-    },
-    {
-      _id: 2,
-      name: "Ramen",
-      size: "2 servings",
-      ingredients: ["Ramen noodles", "Chicken broth", "Miso paste"],
-      prep_time: "15 minutes",
-      cooking_time: "25 minutes",
-      description: "Hearty and flavorful Japanese noodle soup with a rich broth and a variety of toppings.",
-      main_image: "/images/ramen.jpg",
-    },
-    {
-      _id: 3,
-      name: "Tempura",
-      size: "4 servings",
-      ingredients: ["Shrimp", "Vegetables", "Tempura batter mix"],
-      prep_time: "20 minutes",
-      cooking_time: "15 minutes",
-      description: "Crispy fried vegetables and shrimp, lightly battered for a perfect crunch.",
-      main_image: "/images/tempura.jpg",
-    },
-    {
-      _id: 4,
-      name: "Miso Soup",
-      size: "4 servings",
-      ingredients: ["Dashi stock", "Miso paste", "Tofu"],
-      prep_time: "5 minutes",
-      cooking_time: "10 minutes",
-      description: "A simple and comforting soup made with dashi, miso paste, and soft tofu.",
-      main_image: "/images/miso_soup.jpg",
-    },
-    {
-      _id: 5,
-      name: "Okonomiyaki",
-      size: "2 servings",
-      ingredients: ["Flour", "Cabbage", "Pork belly slices"],
-      prep_time: "15 minutes",
-      cooking_time: "20 minutes",
-      description: "Savory Japanese pancake packed with cabbage and topped with okonomiyaki sauce and mayonnaise.",
-      main_image: "/images/okonomiyaki.jpg",
-    },
-    {
-      _id: 6,
-      name: "Yakitori",
-      size: "4 servings",
-      ingredients: ["Chicken", "Soy sauce", "Skewers"],
-      prep_time: "10 minutes",
-      cooking_time: "15 minutes",
-      description: "Grilled chicken skewers glazed with a savory soy sauce, perfect for an appetizer or snack.",
-      main_image: "/images/yakitori.jpg",
-    },
-    {
-      _id: 7,
-      name: "Takoyaki",
-      size: "6 servings",
-      ingredients: ["Octopus", "Flour", "Tenkasu (tempura scraps)"],
-      prep_time: "20 minutes",
-      cooking_time: "10 minutes",
-      description: "Popular street food made with tender octopus pieces inside a crispy batter, topped with takoyaki sauce and bonito flakes.",
-      main_image: "/images/takoyaki.jpg",
-    },
-    {
-      _id: 8,
-      name: "Mochi",
-      size: "8 servings",
-      ingredients: ["Glutinous rice flour", "Sugar", "Cornstarch"],
-      prep_time: "10 minutes",
-      cooking_time: "20 minutes",
-      description: "Chewy and sweet rice cakes often filled with a sweet paste, perfect for dessert.",
-      main_image: "/images/mochi.jpg",
-    },
   ];
 
   const recipeSchema = Joi.object({
@@ -102,63 +47,88 @@ const recipes = [
     description: Joi.string().required(),
     main_image: Joi.string()
       .pattern(/^(https?:\/\/[^\s]+|\/[^\s]+(\.jpg|\.png|\.jpeg))$/i)
-      .required(),
+      .optional(),
   }).unknown(true);
 
-// Route to serve the recipes as JSON
-app.get("/api/recipes", (req, res) => {
-  res.json(recipes);
+// GET: Fetch all recipes
+app.get('/api/recipes', async (req, res) => {
+  try {
+    const recipes = await Recipe.find(); // Fetch all recipes from MongoDB
+    res.json(recipes); // Send the recipes as a JSON response
+  } catch (err) {
+    console.error('Failed to fetch recipes:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch recipes' });
+  }
 });
 
 // POST request: Add a new recipe
-app.post("/api/recipes", (req, res) => {
-  console.log("Request body:", req.body); 
-
-  const { error, value } = recipeSchema.validate(req.body);
+app.post('/api/recipes', upload.single('main_image'), async (req, res) => {
+  const { error } = recipeSchema.validate(req.body);
   if (error) {
-    console.error("Validation error:", error.details);
     return res.status(400).json({ success: false, message: error.details[0].message });
   }
 
-  const newRecipe = {
-    _id: recipes.length + 1, 
-    ...value,
-  };
+  const newRecipe = new Recipe({
+    name: req.body.name,
+    size: req.body.size,
+    ingredients: req.body.ingredients,
+    prep_time: req.body.prep_time,
+    cooking_time: req.body.cooking_time,
+    description: req.body.description,
+    main_image: req.file ? req.file.path : null, // Save uploaded image path
+  });
 
-  recipes.push(newRecipe); 
-  console.log("New recipe added:", newRecipe); 
-  res.status(201).json({ success: true, recipe: newRecipe });
+  try {
+    const savedRecipe = await newRecipe.save();
+    res.status(201).json({ success: true, recipe: savedRecipe });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to add recipe' });
+  }
 });
 
 // PUT request: Update existing recipe
-app.put("/api/recipes/:id", (req, res) => {
-  const recipeId = parseInt(req.params.id); 
-
-  const { error, value } = recipeSchema.validate(req.body);
+app.put('/api/recipes/:id', upload.single('main_image'), async (req, res) => {
+  const { error } = recipeSchema.validate(req.body);
   if (error) {
     return res.status(400).json({ success: false, message: error.details[0].message });
   }
 
-  const index = recipes.findIndex((recipe) => recipe._id === recipeId);
-  if (index === -1) {
-    return res.status(404).json({ success: false, message: "Recipe not found" });
-  }
+  try {
+    const updatedRecipe = await Recipe.findByIdAndUpdate(
+      req.params.id,
+      {
+        name: req.body.name,
+        size: req.body.size,
+        ingredients: req.body.ingredients,
+        prep_time: req.body.prep_time,
+        cooking_time: req.body.cooking_time,
+        description: req.body.description,
+        main_image: req.file ? req.file.path : req.body.main_image, // Update image if a new one is uploaded
+      },
+      { new: true }
+    );
 
-  recipes[index] = { ...recipes[index], ...value }; 
-  res.status(200).json({ success: true, recipe: recipes[index] });
+    if (!updatedRecipe) {
+      return res.status(404).json({ success: false, message: 'Recipe not found' });
+    }
+
+    res.status(200).json({ success: true, recipe: updatedRecipe });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to update recipe' });
+  }
 });
 
 // DELETE request: Delete recipe
-app.delete("/api/recipes/:id", (req, res) => {
-  const recipeId = parseInt(req.params.id); 
-
-  const index = recipes.findIndex((recipe) => recipe._id === recipeId);
-  if (index === -1) {
-    return res.status(404).json({ success: false, message: "Recipe not found" });
+app.delete('/api/recipes/:id', async (req, res) => {
+  try {
+    const deletedRecipe = await Recipe.findByIdAndDelete(req.params.id);
+    if (!deletedRecipe) {
+      return res.status(404).json({ success: false, message: "Recipe not found" });
+    }
+    res.status(200).json({ success: true, message: "Recipe deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to delete recipe" });
   }
-
-  recipes.splice(index, 1); 
-  res.status(200).json({ success: true, message: "Recipe deleted successfully" });
 });
 
 // Serve the index.html file
