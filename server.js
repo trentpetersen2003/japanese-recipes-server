@@ -23,16 +23,22 @@ const cors = require("cors");
 app.use(cors());
 app.use(express.json());
 
-const multer = require('multer');
 const path = require('path');
+const multer = require('multer');
+const fs = require('fs');
+const uploadDir = 'uploads';
 
-// Configure storage for uploaded files
+// Create uploads directory if it doesn't exist
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/'); // Save files in the 'uploads' folder
+    cb(null, 'uploads/');
   },
   filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname)); // Add timestamp to avoid name conflicts
+    cb(null, `${Date.now()}-${file.originalname}`);
   },
 });
 
@@ -54,6 +60,8 @@ const recipes = [
       .optional(),
   }).unknown(true);
 
+app.use(express.urlencoded({ extended: true }));
+
 // GET: Fetch all recipes
 app.get('/api/recipes', async (req, res) => {
   try {
@@ -67,8 +75,18 @@ app.get('/api/recipes', async (req, res) => {
 
 // POST request: Add a new recipe
 app.post('/api/recipes', upload.single('main_image'), async (req, res) => {
+  console.log("Incoming request body:", req.body); // Log request body
+  console.log("Uploaded file details:", req.file); // Log uploaded file
+
+  const parsedIngredients = typeof req.body.ingredients === 'string'
+    ? req.body.ingredients.split(',').map((item) => item.trim())
+    : req.body.ingredients;
+
+  req.body.ingredients = parsedIngredients;
+
   const { error } = recipeSchema.validate(req.body);
   if (error) {
+    console.error("Validation error:", error.details);
     return res.status(400).json({ success: false, message: error.details[0].message });
   }
 
@@ -79,14 +97,17 @@ app.post('/api/recipes', upload.single('main_image'), async (req, res) => {
     prep_time: req.body.prep_time,
     cooking_time: req.body.cooking_time,
     description: req.body.description,
-    main_image: req.file ? req.file.path : null, // Save uploaded image path
+    main_image: req.file ? `/uploads/${req.file.filename}` : null,
   });
 
   try {
+    console.log("Saving recipe to database:", newRecipe);
     const savedRecipe = await newRecipe.save();
+    console.log("Recipe saved successfully:", savedRecipe);
     res.status(201).json({ success: true, recipe: savedRecipe });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Failed to add recipe' });
+    console.error("Error saving recipe:", err);
+    res.status(500).json({ success: false, message: "Failed to save recipe." });
   }
 });
 
